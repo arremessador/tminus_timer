@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>T-Minus Timer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 2.5rem 3rem;
+      width: min(420px, 92vw);
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      letter-spacing: .5px;
+      margin-bottom: 1.8rem;
+      text-align: center;
+      color: #58a6ff;
+    }
+
+    .field {
+      margin-bottom: 1.2rem;
+    }
+
+    label {
+      display: block;
+      font-size: .85rem;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      margin-bottom: .4rem;
+    }
+
+    input[type="number"],
+    select {
+      width: 100%;
+      padding: .6rem .9rem;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e6edf3;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    input[type="number"]:focus,
+    select:focus { border-color: #58a6ff; }
+
+    input[type="number"] { font-size: 1.1rem; text-align: center; }
+
+    .actions {
+      display: flex;
+      gap: .8rem;
+      margin-top: 1.6rem;
+    }
+
+    button {
+      flex: 1;
+      padding: .65rem 1rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+
+    button:active { transform: scale(.97); }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+
+    #btn-start  { background: #238636; color: #fff; }
+    #btn-stop   { background: #da3633; color: #fff; }
+    #btn-reset  { background: #21262d; color: #e6edf3; border: 1px solid #30363d; }
+
+    /* countdown display */
+    .display {
+      margin-top: 1.8rem;
+      text-align: center;
+    }
+
+    #timer-display {
+      font-size: 4rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #58a6ff;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    #timer-display.urgent { color: #f85149; }
+
+    #status-msg {
+      margin-top: .6rem;
+      font-size: .95rem;
+      color: #8b949e;
+      min-height: 1.4em;
+    }
+
+    /* log */
+    .log-box {
+      margin-top: 1.4rem;
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      padding: .7rem .9rem;
+      max-height: 140px;
+      overflow-y: auto;
+      font-size: .83rem;
+      color: #8b949e;
+    }
+
+    .log-box p { line-height: 1.6; }
+    .log-box p span.ts { color: #3fb950; margin-right: .4rem; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>⏱ T-Minus Timer</h1>
+
+  <div class="field">
+    <label for="duration">Duration (minutes)</label>
+    <input type="number" id="duration" min="1" max="999" value="10" />
+  </div>
+
+  <div class="field">
+    <label for="language">Voice Language</label>
+    <select id="language">
+      <option value="pt-BR">Português (Brasil)</option>
+      <option value="pt-PT">Português (Portugal)</option>
+      <option value="en-US">English (US)</option>
+      <option value="en-GB">English (UK)</option>
+      <option value="es-ES">Español</option>
+      <option value="fr-FR">Français</option>
+      <option value="de-DE">Deutsch</option>
+      <option value="it-IT">Italiano</option>
+      <option value="ja-JP">日本語</option>
+      <option value="zh-CN">中文 (简体)</option>
+    </select>
+  </div>
+
+  <div class="actions">
+    <button id="btn-start">▶ Start</button>
+    <button id="btn-stop"  disabled>⏸ Pause</button>
+    <button id="btn-reset" disabled>↺ Reset</button>
+  </div>
+
+  <div class="display">
+    <div id="timer-display">00:00</div>
+    <div id="status-msg">Set a duration and press Start.</div>
+  </div>
+
+  <div class="log-box" id="log"></div>
+</div>
+
+<script>
+  // ── Internationalised announcement phrases ───────────────────────────────
+  const PHRASES = {
+    'pt-BR': (n) => n === 0 ? 'O tempo acabou!' : n === 1 ? 'Falta 1 minuto.' : `Faltam ${n} minutos.`,
+    'pt-PT': (n) => n === 0 ? 'O tempo acabou!' : n === 1 ? 'Falta 1 minuto.' : `Faltam ${n} minutos.`,
+    'en-US': (n) => n === 0 ? 'Time is up!' : n === 1 ? '1 minute remaining.' : `${n} minutes remaining.`,
+    'en-GB': (n) => n === 0 ? 'Time is up!' : n === 1 ? '1 minute remaining.' : `${n} minutes remaining.`,
+    'es-ES': (n) => n === 0 ? '¡El tiempo se acabó!' : n === 1 ? 'Falta 1 minuto.' : `Faltan ${n} minutos.`,
+    'fr-FR': (n) => n === 0 ? 'Le temps est écoulé !' : n === 1 ? 'Il reste 1 minute.' : `Il reste ${n} minutes.`,
+    'de-DE': (n) => n === 0 ? 'Die Zeit ist abgelaufen!' : n === 1 ? 'Noch 1 Minute.' : `Noch ${n} Minuten.`,
+    'it-IT': (n) => n === 0 ? 'Il tempo è scaduto!' : n === 1 ? 'Manca 1 minuto.' : `Mancano ${n} minuti.`,
+    'ja-JP': (n) => n === 0 ? '時間切れです！' : n === 1 ? 'あと1分です。' : `あと${n}分です。`,
+    'zh-CN': (n) => n === 0 ? '时间到！' : `还有${n}分钟。`,
+  };
+
+  // ── DOM refs ─────────────────────────────────────────────────────────────
+  const durationInput  = document.getElementById('duration');
+  const languageSelect = document.getElementById('language');
+  const btnStart       = document.getElementById('btn-start');
+  const btnStop        = document.getElementById('btn-stop');
+  const btnReset       = document.getElementById('btn-reset');
+  const timerDisplay   = document.getElementById('timer-display');
+  const statusMsg      = document.getElementById('status-msg');
+  const logBox         = document.getElementById('log');
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let totalSeconds   = 0;   // countdown value in seconds
+  let intervalId     = null;
+  let running        = false;
+  let initialMinutes = 0;
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function fmt(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function log(msg) {
+    const p = document.createElement('p');
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    p.innerHTML = `<span class="ts">[${ts}]</span>${msg}`;
+    logBox.prepend(p);
+  }
+
+  function speak(text, lang) {
+    if (!('speechSynthesis' in window)) {
+      log(`🔇 Speech not supported – would say: "${text}"`);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = lang;
+    // Try to find a matching voice; fall back to default
+    const voices = window.speechSynthesis.getVoices();
+    const langPrefix = lang.split('-')[0];
+    const match = voices.find(v => v.lang === lang || v.lang.startsWith(langPrefix));
+    if (match) utt.voice = match;
+    window.speechSynthesis.speak(utt);
+    log(`🔊 "${text}"`);
+  }
+
+  function getPhrase(minutesLeft) {
+    const lang = languageSelect.value;
+    const fn = PHRASES[lang] || PHRASES['pt-BR'];
+    return fn(minutesLeft);
+  }
+
+  function updateDisplay() {
+    timerDisplay.textContent = fmt(totalSeconds);
+    const urgent = totalSeconds <= 60 && totalSeconds > 0;
+    timerDisplay.classList.toggle('urgent', urgent);
+  }
+
+  function setStatus(msg) { statusMsg.textContent = msg; }
+
+  function setButtons(state) {
+    // state: 'idle' | 'running' | 'paused' | 'done'
+    btnStart.disabled  = state === 'running';
+    btnStop.disabled   = state !== 'running';
+    btnReset.disabled  = state === 'idle';
+    durationInput.disabled  = state === 'running';
+    languageSelect.disabled = state === 'running';
+    btnStart.textContent = (state === 'paused') ? '▶ Resume' : '▶ Start';
+  }
+
+  // ── Tick ──────────────────────────────────────────────────────────────────
+  function tick() {
+    if (totalSeconds <= 0) {
+      finish();
+      return;
+    }
+
+    totalSeconds--;
+    updateDisplay();
+
+    if (totalSeconds === 0) {
+      finish();
+      return;
+    }
+
+    // Announce every full minute
+    if (totalSeconds % 60 === 0) {
+      const minutesLeft = totalSeconds / 60;
+      speak(getPhrase(minutesLeft), languageSelect.value);
+    }
+  }
+
+  function finish() {
+    clearInterval(intervalId);
+    intervalId = null;
+    running = false;
+    totalSeconds = 0;
+    updateDisplay();
+    const phrase = getPhrase(0);
+    speak(phrase, languageSelect.value);
+    setStatus('🏁 ' + phrase);
+    setButtons('done');
+  }
+
+  // ── Controls ──────────────────────────────────────────────────────────────
+  btnStart.addEventListener('click', () => {
+    if (!running) {
+      if (!intervalId) {
+        // Fresh start (not resuming)
+        const mins = parseInt(durationInput.value, 10);
+        if (!mins || mins < 1) {
+          setStatus('⚠️ Please enter a valid duration.');
+          return;
+        }
+        initialMinutes = mins;
+        totalSeconds   = mins * 60;
+        updateDisplay();
+        // Announce start
+        speak(getPhrase(mins), languageSelect.value);
+      }
+      intervalId = setInterval(tick, 1000);
+      running    = true;
+      setStatus('⏳ Running…');
+      setButtons('running');
+    }
+  });
+
+  btnStop.addEventListener('click', () => {
+    if (running) {
+      running    = false;
+      clearInterval(intervalId);
+      intervalId = null;
+      setStatus('⏸ Paused.');
+      setButtons('paused');
+    }
+  });
+
+  btnReset.addEventListener('click', () => {
+    clearInterval(intervalId);
+    intervalId   = null;
+    running      = false;
+    totalSeconds = 0;
+    updateDisplay();
+    setStatus('Set a duration and press Start.');
+    setButtons('idle');
+    durationInput.value = initialMinutes || 10;
+  });
+
+  // Pre-load voices (Chrome requires this)
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', () => {
+      window.speechSynthesis.getVoices(); // cache
+    });
+  }
+</script>
+</body>
+</html>
